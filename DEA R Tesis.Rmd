@@ -1,0 +1,138 @@
+---
+title: "Dea"
+author: "Mario"
+date: "2022-09-05"
+output: html_document
+---
+
+```{r}
+#Se importan las librerías
+library(Benchmarking) 
+library(psych)
+library(dplyr)
+library(writexl)
+library(readr)
+library(ggplot2)
+library(readxl)
+library(tidyverse)
+library(tibble)
+library(purrr)
+library(tidyr)
+library(dbplyr)
+library(magrittr)
+library(gtsummary)
+require(gridExtra)
+library("reshape2")
+library(kableExtra)
+```
+
+```{r}
+#Se importa la planilla excel con los datos
+Variables_3 <- read_excel("/Volumes/GoogleDrive/Mi unidad/Preparación de Tesis/R/Variables 3.xlsx")
+View(Variables_3)
+
+#Se guarda en el data frame First_division, solo las observaciones que pertenezcan a primera division, ya que esas son las que conformaran el analisis
+First_division <- Variables_3 %>% 
+  filter(DIVISION==1)
+
+First_division <- First_division[First_division$clasificacion!="0", ]
+View(First_division)
+```
+
+```{r}
+#relacion entre ingresos por venta y clasificacion en la tabla
+a <- ggplot(data = First_division, mapping = aes(x = clasificacion, y = Ingresos_de_explotacion))+ geom_point() +
+  geom_smooth() +
+  xlab("Clasificación") +
+  ylab("Ingresos")
+
+b <- ggplot(data = First_division, mapping = aes(x = Costos_de_explotacion, y = Ingresos_de_explotacion))+ geom_point() +
+  geom_smooth() +
+  xlab("Costos") +
+  ylab("Ingresos")
+
+c <- ggplot(data = First_division, mapping = aes(x = Gastos_de_administracion, y = Ingresos_de_explotacion))+ geom_point() +
+  geom_smooth() +
+  xlab("Gastos") +
+  ylab("Ingresos")
+
+d <- ggplot(data = First_division, mapping = aes(x = TOTAL_ACTIVOS, y = Ingresos_de_explotacion))+ geom_point() +
+  geom_smooth() +
+  xlab("Activos Totales") +
+  ylab("Ingresos")
+
+grid.arrange(a, b, c, d)
+           
+```
+
+```{r}
+#Se definen inputs y outputs
+x <- with(First_division, cbind(Costos_de_explotacion , Gastos_de_administracion , TOTAL_ACTIVOS, clasificacion))
+y <- matrix(First_division$Ingresos_de_explotacion)
+x
+y
+```
+
+```{r}
+#Se calcula eficiencias y holguras
+bcc <- dea(x,y,RTS = "vrs", ORIENTATION = "in")
+eff(bcc)
+sm<-summary(bcc)
+rm(sm)
+```
+
+```{r}
+sl <- slack(x, y , bcc)
+datos_correccion <- data.frame(First_division$CODIGO , eff(bcc) , eff(sl), sl$slack , sl$sx , sl$sy , lambda(sl))
+
+```
+
+```{r}
+#se crea la data final, con la combinacion de columnas de First division y datos relevantes
+datosunidos2 <- inner_join(First_division,datos_correccion,by = c("CODIGO" = "First_division.CODIGO"))
+#generar archivo
+write.csv(datosunidos2, file = "datosunidos.csv")
+View(datosunidos2)
+summary(datosunidos2)
+
+```
+
+```{r}
+#Agregar columna a datosunidos2 con las sadp de cada observacion
+
+SADP <- substr(datosunidos2$CODIGO,start = 6, stop = 30)
+datosunidos2 <- cbind(datosunidos2,SADP)
+Anio <- substr(datosunidos2$CODIGO, start = 0, stop = 4)
+datosunidos2 <- cbind(datosunidos2,Anio)
+
+```
+
+```{r}
+round_df <- function(datosunidos2, digits) {
+  nums <- vapply(datosunidos2, is.numeric, FUN.VALUE = logical(1))
+
+  datosunidos2[,nums] <- round(datosunidos2[,nums], digits = digits)
+
+  (datosunidos2)
+}
+round_df(datosunidos2, digits=2)
+view(datosunidos2)
+```
+
+
+```{r}
+#Eficiancias SADP por año
+g<-ggplot(data = datosunidos2) +
+  geom_bar(mapping = aes(x = Anio, y = eff.bcc.), stat = "identity",color="#26456E", fill="#26456E")+
+  facet_wrap(~SADP,nrow= 5)
+  
+g <- g + labs (x="Año", 
+          y="Eficiencia"
+          )
+g
+
+```
+
+
+
+
